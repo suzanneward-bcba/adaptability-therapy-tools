@@ -273,9 +273,9 @@ $('#grid').addEventListener('click',e=>{
   const hid=e.target.closest('[data-hide]');
   if(hid){e.stopPropagation();const t=tileFor(hid.dataset.hide);if(t){t.hidden=!t.hidden;S.slots=S.slots.map(x=>x&&x.id===t.id&&t.hidden?null:x);render();toast(t.hidden?`"${t.name}" hidden from the board`:`"${t.name}" back on the board`)}return}
   const ren=e.target.closest('[data-ren]');
-  if(ren){e.stopPropagation();const t=tileFor(ren.dataset.ren);if(!t)return;hideForms();renameId=t.id;$('#renPreview').innerHTML=art(t);$('#renName').value=t.name;$('#renForm').hidden=false;$('#renName').focus();$('#renName').select();return}
+  if(ren){e.stopPropagation();const t=tileFor(ren.dataset.ren);if(!t)return;hideForms();renameId=t.id;$('#renPreview').innerHTML=art(t);$('#renName').value=t.name;$('#renForm').hidden=false;$('#renForm').scrollIntoView({behavior:'smooth',block:'center'});$('#renName').focus();$('#renName').select();return}
   const tim=e.target.closest('[data-timer]');
-  if(tim){e.stopPropagation();const t=tileFor(tim.dataset.timer);if(!t)return;hideForms();timerEditId=t.id;$('#timerSel').value=String(t.timerMin||0);$('#timerForm').hidden=false;return}
+  if(tim){e.stopPropagation();const t=tileFor(tim.dataset.timer);if(!t)return;hideForms();timerEditId=t.id;$('#timerSel').value=String(t.timerMin||0);$('#timerForm').hidden=false;$('#timerForm').scrollIntoView({behavior:'smooth',block:'center'});return}
   const del=e.target.closest('[data-del]');
   if(del){e.stopPropagation();const t=tileFor(del.dataset.del);if(!t)return;if(delArmed!==t.id){delArmed=t.id;toast(`Tap x again to remove "${t.name}"`);setTimeout(()=>{if(delArmed===t.id)delArmed=null},3000);return}delArmed=null;{S.tiles=S.tiles.filter(x=>x.id!==t.id);S.slots=S.slots.map(s=>s&&s.id===t.id?null:s);S.done=S.done.filter(id=>id!==t.id);logLine(`Removed activity "${t.name}"`)}return}
   const cam=e.target.closest('[data-cam]');
@@ -326,7 +326,7 @@ $('#fileIn').onchange=e=>{
   const r=new FileReader();
   r.onload=()=>shrink(r.result,photo=>{
     if(target==='__new__'){
-      hideForms();pendingPhoto=photo;$('#newPreview').src=photo;$('#newName').value='';$('#newForm').hidden=false;$('#newName').focus();
+      hideForms();pendingPhoto=photo;$('#newPreview').src=photo;$('#newName').value='';$('#newForm').hidden=false;$('#newForm').scrollIntoView({behavior:'smooth',block:'center'});$('#newName').focus();
     }else{const t=tileFor(target);if(t){t.photo=photo;logLine(`Photo replaced on "${t.name}"`);render()}}
   });
   r.readAsDataURL(f);

@@ -122,6 +122,9 @@ body.adult .tile .cam{display:block}
 .slot .empty{opacity:.7;font-size:.8rem}
 .pocket{background:var(--pocket);border-radius:14px;padding:10px;min-height:70px;display:flex;flex-wrap:wrap;gap:6px;align-items:center}
 .reward .art{width:48px;height:48px;border-radius:8px;overflow:hidden;flex:none}.reward .art svg,.reward .art img{width:100%;height:100%;object-fit:cover}
+.pocket .chip.byp{display:inline-flex;align-items:center;gap:6px;box-shadow:inset 0 0 0 2.5px var(--pc)}
+.pocket .chip .who{font-size:.68rem}
+.pocket .adulttag{font-size:.66rem;font-weight:800;border-radius:999px;padding:1px 7px;background:rgba(0,0,0,.08)}
 .pocket .chip{background:var(--done-bg);color:var(--done);border-radius:999px;padding:6px 12px;font-size:1rem;font-weight:800}
 .reward{display:flex;align-items:center;justify-content:center;gap:8px;margin-top:auto;background:var(--accent);color:var(--accent-ink);border-radius:14px;padding:12px;text-align:center;font-weight:800;font-size:1.1rem}
 .adultbar{display:none;margin-top:14px;background:var(--board);border:1.5px solid var(--line);border-radius:16px;padding:14px}
@@ -244,6 +247,12 @@ body.adult .adultbar{display:block}
     <span class="vp" data-vp="done"><b>"All done!"</b> <button class="btn" data-vrec="done">&#9679; Record</button><button class="btn" data-vplay="done">&#9654;</button><button class="btn" data-vdel="done" title="Delete recording">&#10005;</button><span class="hint vstat" style="margin:0"></span></span>
     <span class="hint" style="margin:0;flex-basis:100%">Record in the voice the learner hears every day (therapist, or a parent at home). Tap Record, say the phrase, and it stops on its own after 3 seconds. Recordings stay on this tablet only.</span>
   </div>
+  <div class="row" id="backupRow" style="border-top:1.5px solid var(--line);padding-top:10px">
+    <label style="color:var(--ink)">Backup</label>
+    <button class="btn" id="btnExport">&#8681; Save setup file</button>
+    <button class="btn" id="btnImport">&#8679; Load setup file</button>
+    <span class="hint" style="margin:0;flex-basis:100%">Saves one file with this device's photos, names, hidden tiles, added activities, timers, voice prompts, Then item, slots, and Taking turns children. Keep it somewhere safe, or load it on another tablet or a parent's phone to copy the whole setup. Loading a file replaces the setup on this device. The file holds children's photos and first names, so keep it on a clinic or family device or drive, not in email.</span>
+  </div>
   <div class="row" style="border-top:1.5px solid var(--line);padding-top:10px">
     <label style="color:var(--ink)">Defaults</label>
     <button class="btn" id="btnShowAll">Show all tiles</button>
@@ -252,6 +261,7 @@ body.adult .adultbar{display:block}
   </div>
   <p class="hint">On a tile: camera replaces the picture, pencil renames it, the clock sets an optional timer, the circle hides or shows it, x removes an added activity. Photos and changes stay on this device only.</p>
   <input type="file" id="fileIn" accept="image/*" hidden>
+  <input type="file" id="setupIn" accept=".json,application/json" hidden>
 </div>
 <div class="toast" id="toast"></div>
 
@@ -327,7 +337,7 @@ const DEFAULT_TILES=[
   {id:'kitchen',name:'Kitchen',icon:'kitchen'},{id:'shopping',name:'Shopping',icon:'shopping'},{id:'exercise',name:'Exercise',icon:'exercise'},
   {id:'groomer',name:'Groomer',icon:'groomer'},{id:'baby',name:'Baby',icon:'baby'},{id:'animals',name:'Animals',icon:'animals'}
 ].sort((a,b)=>a.name.localeCompare(b.name));
-let S={tiles:DEFAULT_TILES.map(t=>({...t})),slots:[null,null,null,null],done:[],adult:false,lockNext:false,reward:'',rewardTile:null,turn:null,
+let S={tiles:DEFAULT_TILES.map(t=>({...t})),slots:[null,null,null,null],done:[],doneBy:[],adult:false,lockNext:false,reward:'',rewardTile:null,turn:null,
   pair:{on:false,count:2,players:[{name:'',color:'#2A60A6',photo:null},{name:'',color:'#C2570C',photo:null},{name:'',color:'#3E7D1E',photo:null}]}};
 const PCOLORS=['#2A60A6','#C2570C','#3E7D1E','#A0407F','#6E3FA3','#C0392B'];
 const pName=i=>(S.pair.players[i].name||'').trim()||('Child '+(i+1));
@@ -381,7 +391,7 @@ function render(){
     const t=tileFor(s.id);
     return `<button class="slot filled ${i===nowIdx?'now':''} ${S.pair.on&&!s.locked&&s.by!=null?'byp':''}" style="${S.pair.on&&!s.locked&&s.by!=null?'--pc:'+S.pair.players[s.by].color:''}" data-i="${i}" aria-label="${t.name}, slot ${i+1}${i===nowIdx?', now':''}"><span class="num">${i+1}</span><span class="art">${art(t)}</span><span class="name">${t.name}</span>${s.locked?'<span class="badge lock">adult pick</span>':''}${S.pair.on&&!s.locked&&s.by!=null?whoChip(s.by):''}</button>`;
   }).join('');
-  $('#pocket').innerHTML=S.done.length?S.done.map(id=>`<span class="chip">&#10003; ${tileFor(id).name}</span>`).join(''):'<span style="opacity:.6;font-size:.8rem">Finished activities land here</span>';
+  $('#pocket').innerHTML=S.done.length?S.done.map((id,k)=>{const by=S.doneBy[k];const who=S.pair.on&&typeof by==='number'&&by<S.pair.count;return `<span class="chip${who?' byp':''}" style="${who?'--pc:'+S.pair.players[by].color:''}">&#10003; ${tileFor(id).name}${who?' '+whoChip(by):''}${S.pair.on&&by==='a'?' <span class="adulttag">adult</span>':''}</span>`}).join(''):'<span style="opacity:.6;font-size:.8rem">Finished activities land here</span>';
   const finished=S.done.length&&!S.slots.some(Boolean);
   $('#timeforLead').textContent=nowIdx>=0?'Time for':(finished?'Time for':'Time to');
   $('#timeforWhat').textContent=nowIdx>=0?tileFor(S.slots[nowIdx].id).name:(finished?(S.rewardTile&&tileFor(S.rewardTile)?tileFor(S.rewardTile).name:(S.reward||'the Then item')):'pick!');
@@ -428,7 +438,7 @@ $('#grid').addEventListener('click',e=>{
   const tim=e.target.closest('[data-timer]');
   if(tim){e.stopPropagation();const t=tileFor(tim.dataset.timer);if(!t)return;hideForms();timerEditId=t.id;$('#timerSel').value=String(t.timerMin||0);$('#timerSay').value=t.timerSay||'clean';$('#timerForm').hidden=false;$('#timerForm').scrollIntoView({behavior:'smooth',block:'center'});return}
   const del=e.target.closest('[data-del]');
-  if(del){e.stopPropagation();const t=tileFor(del.dataset.del);if(!t)return;if(delArmed!==t.id){delArmed=t.id;toast(`Tap x again to remove "${t.name}"`);setTimeout(()=>{if(delArmed===t.id)delArmed=null},3000);return}delArmed=null;{S.tiles=S.tiles.filter(x=>x.id!==t.id);S.slots=S.slots.map(s=>s&&s.id===t.id?null:s);S.done=S.done.filter(id=>id!==t.id);logLine(`Removed activity "${t.name}"`)}return}
+  if(del){e.stopPropagation();const t=tileFor(del.dataset.del);if(!t)return;if(delArmed!==t.id){delArmed=t.id;toast(`Tap x again to remove "${t.name}"`);setTimeout(()=>{if(delArmed===t.id)delArmed=null},3000);return}delArmed=null;{S.tiles=S.tiles.filter(x=>x.id!==t.id);S.slots=S.slots.map(s=>s&&s.id===t.id?null:s);{const keep=S.done.map(id=>id!==t.id);S.doneBy=S.doneBy.filter((_,k)=>keep[k]);S.done=S.done.filter(id=>id!==t.id)}logLine(`Removed activity "${t.name}"`)}return}
   const cam=e.target.closest('[data-cam]');
   if(cam){e.stopPropagation();const inp=$('#fileIn');inp.dataset.for=cam.dataset.cam;inp.click();return}
   if(e.target.closest('#addTile')){const inp=$('#fileIn');inp.dataset.for='__new__';inp.click();return}
@@ -445,7 +455,7 @@ $('#slots').addEventListener('click',e=>{
   const i=+b.dataset.i;const s=S.slots[i];if(!s)return;
   const nowIdx=S.slots.findIndex(x=>x);
   if(i!==nowIdx){toast('Finish the top activity first');logLine(`Tapped slot ${i+1} out of order`);return}
-    S.done.push(s.id);S.slots[i]=null;
+    S.done.push(s.id);S.doneBy.push(s.locked?'a':(s.by!=null?s.by:null));S.slots[i]=null;
   render();
   if(!S.slots.some(x=>x)){toast('All done!')}
 });
@@ -464,7 +474,7 @@ $('#btnDone').onclick=()=>{S.adult=false;hideForms();clearTimeout(idleT);render(
 $('#btnAdultCancel').onclick=()=>{S.lockNext=false;render()};
 $('#btnShuffle').onclick=()=>{const f=S.slots.filter(Boolean);for(let i=f.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[f[i],f[j]]=[f[j],f[i]]}S.slots=S.slots.map((_,i)=>f[i]||null);logLine('Resequenced: '+f.map(s=>tileFor(s.id).name).join(' > '))};
 let resetArmed=null;
-$('#btnReset').onclick=()=>{const b=$('#btnReset');if(resetArmed){clearTimeout(resetArmed);resetArmed=null;b.textContent='Reset session';S.slots=Array(S.slots.length).fill(null);S.done=[];S.lockNext=false;S.turn=null;render();toast('Schedule cleared');return}
+$('#btnReset').onclick=()=>{const b=$('#btnReset');if(resetArmed){clearTimeout(resetArmed);resetArmed=null;b.textContent='Reset session';S.slots=Array(S.slots.length).fill(null);S.done=[];S.doneBy=[];S.lockNext=false;S.turn=null;render();toast('Schedule cleared');return}
   b.textContent='Tap again to clear';resetArmed=setTimeout(()=>{resetArmed=null;b.textContent='Reset session'},3000)};
 $('#nSlots').onchange=e=>{const n=Math.max(2,Math.min(8,+e.target.value||4));const f=S.slots.filter(Boolean).slice(0,n);S.slots=Array(n).fill(null).map((_,i)=>f[i]||null);logLine('Slots set to '+n)};
 $('#rewardSel').onchange=e=>{const v=e.target.value;if(v==='__custom__'){S.rewardTile=null;S.reward=S.reward||'';render();$('#rewardText').focus()}else{S.rewardTile=v||null;S.reward='';render()}};
@@ -481,7 +491,7 @@ $('#voiceRow').addEventListener('click',e=>{const r=e.target.closest('[data-vrec
   if(r){startRec(r.dataset.vrec)}else if(pl){playVoice(pl.dataset.vplay)}else if(dl){delete VOICE[dl.dataset.vdel];saveVoice();renderVoice();toast('Recording deleted')}});
 $('#timerCancel').onclick=()=>{timerEditId=null;$('#timerForm').hidden=true};
 $('#btnShowAll').onclick=()=>{S.tiles.forEach(t=>t.hidden=false);render();toast('All tiles shown')};
-$('#btnRestore').onclick=()=>{const b=$('#btnRestore');if(restoreArmed){clearTimeout(restoreArmed);restoreArmed=null;b.textContent='Restore built-in tiles';S.tiles=DEFAULT_TILES.map(t=>({...t}));S.slots=Array(S.slots.length).fill(null);S.done=[];S.rewardTile=null;S.reward='';render();toast('Built-in tiles restored');return}
+$('#btnRestore').onclick=()=>{const b=$('#btnRestore');if(restoreArmed){clearTimeout(restoreArmed);restoreArmed=null;b.textContent='Restore built-in tiles';S.tiles=DEFAULT_TILES.map(t=>({...t}));S.slots=Array(S.slots.length).fill(null);S.done=[];S.doneBy=[];S.rewardTile=null;S.reward='';render();toast('Built-in tiles restored');return}
   b.textContent='Tap again to restore';restoreArmed=setTimeout(()=>{restoreArmed=null;b.textContent='Restore built-in tiles'},3000)};
 let pendingPhoto=null;
 $('#newSave').onclick=()=>{const name=$('#newName').value.trim();if(!name){$('#newName').focus();return}const id='c'+Date.now();S.tiles.push({id,name,photo:pendingPhoto,custom:true});pendingPhoto=null;$('#newForm').hidden=true;render();toast(`Added "${name}"`)};
@@ -492,13 +502,30 @@ $('#fileIn').onchange=e=>{
   const f=e.target.files[0];const target=e.target.dataset.for;e.target.value='';if(!f)return;
   const r=new FileReader();
   r.onload=()=>shrink(r.result,photo=>{
-    if(target==='__p0'||target==='__p1'){S.pair.players[+target.slice(3)].photo=photo;render();return}
+    if(/^__p[0-2]$/.test(target)){S.pair.players[+target.slice(3)].photo=photo;render();return}
     if(target==='__new__'){
       hideForms();pendingPhoto=photo;$('#newPreview').src=photo;$('#newName').value='';$('#newForm').hidden=false;$('#newForm').scrollIntoView({behavior:'smooth',block:'center'});$('#newName').focus();
     }else{const t=tileFor(target);if(t){t.photo=photo;logLine(`Photo replaced on "${t.name}"`);render()}}
   });
   r.readAsDataURL(f);
 };
+function setupData(){return {app:'pickandplay',version:1,exported:new Date().toISOString(),settings:{tiles:S.tiles,reward:S.reward,rewardTile:S.rewardTile,n:S.slots.length,pair:S.pair},voice:VOICE}}
+$('#btnExport').onclick=async()=>{
+  const d=new Date(),name='pick-and-play-setup-'+d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')+'.json';
+  const blob=new Blob([JSON.stringify(setupData())],{type:'application/json'});
+  try{const file=new File([blob],name,{type:'application/json'});
+    if(navigator.canShare&&navigator.canShare({files:[file]})){await navigator.share({files:[file],title:'Pick and Play setup'});toast('Setup file ready');return}}catch(e){if(e&&e.name==='AbortError')return}
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},1500);toast('Setup file saved');logLine('Saved setup file');
+};
+$('#btnImport').onclick=()=>$('#setupIn').click();
+$('#setupIn').onchange=e=>{const f=e.target.files[0];e.target.value='';if(!f)return;const r=new FileReader();
+  r.onload=()=>{let d;try{d=JSON.parse(r.result)}catch(err){toast('That file is not a Pick and Play setup');return}
+    if(!d||d.app!=='pickandplay'||!d.settings||!Array.isArray(d.settings.tiles)){toast('That file is not a Pick and Play setup');return}
+    try{localStorage.setItem('pickandplay',JSON.stringify(d.settings))}catch(err){toast('Not enough space to load this setup');return}
+    VOICE=(d.voice&&typeof d.voice==='object')?d.voice:{};saveVoice();
+    S.tiles=DEFAULT_TILES.map(t=>({...t}));S.done=[];S.doneBy=[];S.lockNext=false;S.turn=null;load();fixColors();renderVoice();$('#nSlots').value=S.slots.length;$('#rewardText').value=S.reward;render();
+    toast('Setup loaded');logLine('Loaded setup file');};
+  r.readAsText(f)};
 function fixColors(){const used=new Set();for(let k=0;k<S.pair.count;k++){const pl=S.pair.players[k];if(used.has(pl.color))pl.color=PCOLORS.find(c=>!used.has(c));used.add(pl.color)}}
 function renderTurns(){const on=S.pair.on;$('#turnsOn').checked=on;$('#turnsSetup').hidden=!on;$('#turnsCountWrap').hidden=!on;$('#turnsCount').value=String(S.pair.count);
   document.querySelectorAll('.pcard').forEach(c=>{const i=+c.dataset.p,pl=S.pair.players[i];c.hidden=i>=S.pair.count;c.style.setProperty('--pc',pl.color);const av=c.querySelector('.pav');av.innerHTML=pl.photo?`<img src="${pl.photo}" alt="">`:(esc(pName(i).charAt(0).toUpperCase())+'<span style="position:absolute;font-size:0">add photo</span>');

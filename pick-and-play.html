@@ -44,6 +44,7 @@ h1{font-size:1.15rem;font-weight:800;margin:0;letter-spacing:.01em}
 .strip h2.stripHead{display:flex;align-items:center;justify-content:space-between;gap:6px;flex-wrap:nowrap}
 .timerBadge{display:inline-flex;align-items:center;padding:4px 10px;border-radius:999px;background:var(--accent);color:var(--accent-ink);font-size:.95rem;font-weight:800;white-space:nowrap}
 .timerStart{font:inherit;font-size:.95rem;font-weight:800;display:inline-flex;align-items:center;gap:4px;padding:4px 10px;min-height:36px;border-radius:999px;border:2px solid var(--accent);background:var(--strip-text);color:var(--strip);cursor:pointer;white-space:nowrap}
+.vp{display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap}.vp .btn{min-height:36px;padding:6px 10px}.vp .btn.rec{background:#E0564E;border-color:#E0564E;color:#fff}
 .timerStart:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
 
 .btn{font:inherit;font-weight:800;border:1.5px solid var(--line);background:var(--board);color:var(--ink);border-radius:10px;padding:8px 12px;cursor:pointer;min-height:40px}
@@ -152,14 +153,20 @@ body.adult .adultbar{display:block}
       <option value="0">Off</option><option value="1">1 min</option><option value="2">2 min</option><option value="3">3 min</option>
       <option value="5">5 min</option><option value="10">10 min</option><option value="15">15 min</option><option value="20">20 min</option><option value="30">30 min</option>
     </select>
-    <label for="timerSay" style="color:var(--ink)">When time's up, say</label>
+    <label for="timerSay" style="color:var(--ink)">When time's up, play</label>
     <select id="timerSay" style="font:inherit;padding:6px;border:1.5px solid var(--line);border-radius:8px;background:var(--board);color:var(--ink)">
-      <option value="clean">"Clean up!"</option><option value="done">"All done!"</option><option value="none">Chime only</option>
+      <option value="clean">Chime + "Clean up!" recording</option><option value="done">Chime + "All done!" recording</option><option value="none">Chime only</option>
     </select>
-    <button class="btn" id="timerTest" type="button">&#128264; Test</button>
+    <button class="btn" id="timerTest" type="button">&#128264; Preview</button>
     <button class="btn primary" id="timerSave">Save</button>
     <button class="btn" id="timerCancel">Cancel</button>
-    <span class="hint" style="margin:0">When this activity is up, a ▶ Start button appears next to "Time for" above the schedule. Press it to start the countdown; when time's up, a chime plays, the tablet says the phrase you picked out loud, and it buzzes where supported. The learner still taps the slot to finish — nothing advances on its own.</span>
+    <span class="hint" style="margin:0">When this activity is up, a ▶ Start button appears next to "Time for" above the schedule. Press it to start the countdown; when time's up, a chime plays, then your recorded voice prompt (record it under Voice prompts below), and it buzzes where supported. The learner still taps the slot to finish — nothing advances on its own.</span>
+  </div>
+  <div class="row" id="voiceRow" style="border-top:1.5px solid var(--line);padding-top:10px">
+    <label style="color:var(--ink)">Voice prompts</label>
+    <span class="vp" data-vp="clean"><b>"Clean up!"</b> <button class="btn" data-vrec="clean">&#9679; Record</button><button class="btn" data-vplay="clean">&#9654;</button><button class="btn" data-vdel="clean" title="Delete recording">&#10005;</button><span class="hint vstat" style="margin:0"></span></span>
+    <span class="vp" data-vp="done"><b>"All done!"</b> <button class="btn" data-vrec="done">&#9679; Record</button><button class="btn" data-vplay="done">&#9654;</button><button class="btn" data-vdel="done" title="Delete recording">&#10005;</button><span class="hint vstat" style="margin:0"></span></span>
+    <span class="hint" style="margin:0;flex-basis:100%">Record in the voice the learner hears every day (therapist, or a parent at home). Tap Record, say the phrase, and it stops on its own after 3 seconds. Recordings stay on this tablet only.</span>
   </div>
   <div class="row" style="border-top:1.5px solid var(--line);padding-top:10px">
     <label style="color:var(--ink)">Defaults</label>
@@ -247,8 +254,26 @@ const DEFAULT_TILES=[
 let S={tiles:DEFAULT_TILES.map(t=>({...t})),slots:[null,null,null,null],done:[],adult:false,lockNext:false,reward:'',rewardTile:null};
 let timerKey=null,timerInterval=null,timerEnd=0,timerMins=0,timerSayNow='clean',audioCtx=null;
 const SAY={clean:'Clean up!',done:'All done!',none:''};
-function speak(key){const txt=SAY[key];if(!txt||!window.speechSynthesis)return;try{speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(txt);u.lang='en-US';u.rate=.9;u.pitch=1.15;u.volume=1;const v=speechSynthesis.getVoices().find(x=>/^en(-|_)US/i.test(x.lang))||speechSynthesis.getVoices().find(x=>/^en/i.test(x.lang));if(v)u.voice=v;speechSynthesis.speak(u)}catch(e){}}
-function unlockSpeech(){try{if(window.speechSynthesis){const u=new SpeechSynthesisUtterance(' ');u.volume=0;speechSynthesis.speak(u)}}catch(e){}}
+const VKEY='pickandplay_voice';
+let VOICE={};try{VOICE=JSON.parse(localStorage.getItem(VKEY)||'{}')}catch(e){VOICE={}}
+function saveVoice(){try{localStorage.setItem(VKEY,JSON.stringify(VOICE))}catch(e){toast('Not enough space to save the recording')}}
+function ctx(){try{audioCtx=audioCtx||new (window.AudioContext||window.webkitAudioContext)();if(audioCtx.resume)audioCtx.resume()}catch(e){}return audioCtx}
+async function playVoice(key){const d=VOICE[key];if(!d||!d.url)return false;try{const c=ctx();const buf=await (await fetch(d.url)).arrayBuffer();const ab=await c.decodeAudioData(buf);const src=c.createBufferSource();src.buffer=ab;src.connect(c.destination);src.start();return true}catch(e){try{new Audio(d.url).play();return true}catch(_){return false}}}
+let recState=null;
+async function startRec(key){
+  if(recState){stopRec();return}
+  if(!navigator.mediaDevices||!window.MediaRecorder){toast('Recording is not available in this browser');return}
+  let stream;try{stream=await navigator.mediaDevices.getUserMedia({audio:true})}catch(e){toast('Microphone not available here; allow it in the browser, or use the live site');return}
+  const type=['audio/mp4','audio/webm;codecs=opus','audio/webm'].find(t=>MediaRecorder.isTypeSupported&&MediaRecorder.isTypeSupported(t))||'';
+  const mr=new MediaRecorder(stream,type?{mimeType:type}:undefined);const chunks=[];const t0=Date.now();
+  mr.ondataavailable=e=>{if(e.data&&e.data.size)chunks.push(e.data)};
+  mr.onstop=()=>{stream.getTracks().forEach(t=>t.stop());const blob=new Blob(chunks,{type:mr.mimeType||type||'audio/webm'});const fr=new FileReader();fr.onload=()=>{VOICE[key]={url:fr.result,sec:Math.round((Date.now()-t0)/100)/10};saveVoice();recState=null;renderVoice();toast('Recording saved');playVoice(key)};fr.readAsDataURL(blob)};
+  recState={key,mr,timer:setTimeout(stopRec,3000)};mr.start();renderVoice();
+}
+function stopRec(){if(!recState)return;clearTimeout(recState.timer);try{recState.mr.stop()}catch(e){recState=null;renderVoice()}}
+function renderVoice(){document.querySelectorAll('.vp').forEach(el=>{const k=el.dataset.vp,has=!!(VOICE[k]&&VOICE[k].url),rec=recState&&recState.key===k;
+  const r=el.querySelector('[data-vrec]');r.innerHTML=rec?'&#9632; Stop':(has?'&#9679; Re-record':'&#9679; Record');r.classList.toggle('rec',!!rec);
+  el.querySelector('[data-vplay]').disabled=!has;el.querySelector('[data-vdel]').hidden=!has;el.querySelector('.vstat').textContent=rec?'Recording…':(has?'Saved ('+VOICE[k].sec+' s)':'Not recorded yet')})}
 const $=s=>document.querySelector(s);
 const art=t=>t.photo?`<img src="${t.photo}" alt="">`:ICON[t.icon];
 function logLine(){render();}
@@ -285,13 +310,13 @@ function render(){
 let delArmed=null,timerEditId=null;
 function hideForms(){$('#newForm').hidden=true;$('#renForm').hidden=true;$('#timerForm').hidden=true}
 function stopTimer(){clearInterval(timerInterval);timerInterval=null;timerKey=null;const b=$('#timerBadge'),st=$('#timerStart');if(b)b.hidden=true;if(st)st.hidden=true}
-function beep(){try{const ctx=audioCtx||new (window.AudioContext||window.webkitAudioContext)();audioCtx=ctx;if(ctx.resume)ctx.resume();const o=ctx.createOscillator();const g=ctx.createGain();o.connect(g);g.connect(ctx.destination);o.type='sine';o.frequency.value=740;g.gain.value=.0001;o.start();g.gain.exponentialRampToValueAtTime(.16,ctx.currentTime+.03);g.gain.exponentialRampToValueAtTime(.0001,ctx.currentTime+.9);o.stop(ctx.currentTime+.95)}catch(e){}}
+function beep(){try{const ctx=window.ctx?window.ctx():audioCtx;const o=ctx.createOscillator();const g=ctx.createGain();o.connect(g);g.connect(ctx.destination);o.type='sine';o.frequency.value=740;g.gain.value=.0001;o.start();g.gain.exponentialRampToValueAtTime(.16,ctx.currentTime+.03);g.gain.exponentialRampToValueAtTime(.0001,ctx.currentTime+.9);o.stop(ctx.currentTime+.95)}catch(e){}}
 function timerTick(){
   const remain=Math.max(0,Math.round((timerEnd-Date.now())/1000));
   const b=$('#timerBadge');if(!b)return;
   const m=Math.floor(remain/60),s=remain%60;
   b.textContent='⏱ '+m+':'+(s<10?'0':'')+s;
-  if(remain<=0){clearInterval(timerInterval);timerInterval=null;b.textContent=SAY[timerSayNow]||'⏱ Done';try{navigator.vibrate&&navigator.vibrate([220,120,220])}catch(e){}beep();setTimeout(()=>speak(timerSayNow),900)}
+  if(remain<=0){clearInterval(timerInterval);timerInterval=null;b.textContent=SAY[timerSayNow]||'⏱ Done';try{navigator.vibrate&&navigator.vibrate([220,120,220])}catch(e){}beep();setTimeout(()=>playVoice(timerSayNow),900)}
 }
 function setupTimerFor(key,mins,say){
   if(timerKey===key)return;
@@ -304,7 +329,6 @@ function setupTimerFor(key,mins,say){
 function startTimer(){
   if(!timerMins||timerInterval)return;
   try{audioCtx=audioCtx||new (window.AudioContext||window.webkitAudioContext)();if(audioCtx.resume)audioCtx.resume()}catch(e){}
-  unlockSpeech();
   timerEnd=Date.now()+timerMins*60000;$('#timerStart').hidden=true;$('#timerBadge').hidden=false;timerTick();timerInterval=setInterval(timerTick,1000);
 }
 $('#timerStart').addEventListener('click',e=>{e.stopPropagation();startTimer()});
@@ -351,7 +375,9 @@ $('#renSave').onclick=()=>{const t=tileFor(renameId);const name=$('#renName').va
 $('#renCancel').onclick=()=>{renameId=null;$('#renForm').hidden=true};
 $('#renName').onkeydown=e=>{if(e.key==='Enter')$('#renSave').click()};
 $('#timerSave').onclick=()=>{const t=tileFor(timerEditId);const v=+$('#timerSel').value;if(t){if(v>0){t.timerMin=v;t.timerSay=$('#timerSay').value}else{delete t.timerMin;delete t.timerSay}}timerEditId=null;$('#timerForm').hidden=true;render();toast(v>0?`Timer set to ${v} min`:'Timer turned off')};
-$('#timerTest').onclick=()=>{beep();setTimeout(()=>speak($('#timerSay').value),900)};
+$('#timerTest').onclick=()=>{const k=$('#timerSay').value;beep();if(k!=='none'&&!(VOICE[k]&&VOICE[k].url))toast('No recording yet: record it under Voice prompts');setTimeout(()=>playVoice(k),900)};
+$('#voiceRow').addEventListener('click',e=>{const r=e.target.closest('[data-vrec]'),pl=e.target.closest('[data-vplay]'),dl=e.target.closest('[data-vdel]');
+  if(r){startRec(r.dataset.vrec)}else if(pl){playVoice(pl.dataset.vplay)}else if(dl){delete VOICE[dl.dataset.vdel];saveVoice();renderVoice();toast('Recording deleted')}});
 $('#timerCancel').onclick=()=>{timerEditId=null;$('#timerForm').hidden=true};
 $('#btnShowAll').onclick=()=>{S.tiles.forEach(t=>t.hidden=false);render();toast('All tiles shown')};
 $('#btnRestore').onclick=()=>{const b=$('#btnRestore');if(restoreArmed){clearTimeout(restoreArmed);restoreArmed=null;b.textContent='Restore built-in tiles';S.tiles=DEFAULT_TILES.map(t=>({...t}));S.slots=Array(S.slots.length).fill(null);S.done=[];S.rewardTile=null;S.reward='';render();toast('Built-in tiles restored');return}
@@ -371,7 +397,7 @@ $('#fileIn').onchange=e=>{
   });
   r.readAsDataURL(f);
 };
-function start(saved){ load(); if(saved&&saved.slots){S={...S,...saved}} $('#nSlots').value=S.slots.length;$('#rewardText').value=S.reward;render(); }
+function start(saved){ load(); renderVoice(); if(saved&&saved.slots){S={...S,...saved}} $('#nSlots').value=S.slots.length;$('#rewardText').value=S.reward;render(); }
 window.claude?.hot?.ready ? window.claude.hot.ready(start) : start(window.claude?.hot?.data ?? {});
 </script>
 

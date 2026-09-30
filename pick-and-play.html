@@ -40,14 +40,18 @@ h1{font-size:1.15rem;font-weight:800;margin:0;letter-spacing:.01em}
 .timefor{display:block;margin:0 0 14px;padding:10px 16px;border-radius:14px;background:var(--board);border:1.5px solid var(--line)}
 .timefor .script{font-weight:800;font-size:2rem;color:var(--strip);line-height:1.1}
 .timefor .what{font-weight:800;font-size:2rem;line-height:1.1;margin-left:.3em}
-.timerBadge{display:inline-flex;align-items:center;margin-left:14px;padding:5px 14px;border-radius:999px;background:var(--accent);color:var(--accent-ink);font-size:1.15rem;font-weight:800;vertical-align:middle}
+[hidden]{display:none!important}
+.strip h2.stripHead{display:flex;align-items:center;justify-content:space-between;gap:6px;flex-wrap:nowrap}
+.timerBadge{display:inline-flex;align-items:center;padding:4px 10px;border-radius:999px;background:var(--accent);color:var(--accent-ink);font-size:.95rem;font-weight:800;white-space:nowrap}
+.timerStart{font:inherit;font-size:.95rem;font-weight:800;display:inline-flex;align-items:center;gap:4px;padding:4px 10px;min-height:36px;border-radius:999px;border:2px solid var(--accent);background:var(--strip-text);color:var(--strip);cursor:pointer;white-space:nowrap}
+.timerStart:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
 
 .btn{font:inherit;font-weight:800;border:1.5px solid var(--line);background:var(--board);color:var(--ink);border-radius:10px;padding:8px 12px;cursor:pointer;min-height:40px}
 .btn:focus-visible,.tile:focus-visible,.slot:focus-visible{outline:3px solid var(--focus);outline-offset:2px}
 .btn.primary{background:var(--strip);border-color:var(--strip);color:var(--strip-text)}
 .btn.warn{background:var(--lock-bg);border-color:var(--lock);color:var(--lock)}
 .btn[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
-.layout{display:grid;grid-template-columns:minmax(0,1fr) 210px;gap:16px;align-items:start}
+.layout{display:grid;grid-template-columns:minmax(0,1fr) 236px;gap:16px;align-items:start}
 @media (max-width:640px){.layout{grid-template-columns:1fr}}
 .board{background:var(--board);border:1.5px solid var(--line);border-radius:16px;padding:14px}
 .board h2,.strip h2,.pocket h2{font-size:.78rem;text-transform:uppercase;letter-spacing:.08em;margin:0 0 10px;color:var(--muted)}
@@ -102,7 +106,7 @@ body.adult .adultbar{display:block}
   </div>
 </div>
 
-<div class="timefor" id="timefor" aria-live="polite"><span class="script" id="timeforLead">Time to</span><span class="what" id="timeforWhat">pick!</span><span class="timerBadge" id="timerBadge" hidden></span></div>
+<div class="timefor" id="timefor" aria-live="polite"><span class="script" id="timeforLead">Time to</span><span class="what" id="timeforWhat">pick!</span></div>
 
 <div class="layout">
   <section class="board" aria-label="Choice board">
@@ -111,7 +115,7 @@ body.adult .adultbar{display:block}
     <p class="hint" id="gridHint">Tap Edit to add activities, change pictures or names, or hide tiles this learner does not use.</p>
   </section>
   <aside class="strip" aria-label="Schedule">
-    <h2>Time for</h2>
+    <h2 class="stripHead"><span style="white-space:nowrap">Time for</span><button class="timerStart" id="timerStart" hidden aria-label="Start timer"></button><span class="timerBadge" id="timerBadge" hidden aria-live="polite"></span></h2>
     <div id="slots" style="display:flex;flex-direction:column;gap:10px"></div>
     <h2 style="margin-top:6px">Finished</h2>
     <div class="pocket" id="pocket"></div>
@@ -148,9 +152,14 @@ body.adult .adultbar{display:block}
       <option value="0">Off</option><option value="1">1 min</option><option value="2">2 min</option><option value="3">3 min</option>
       <option value="5">5 min</option><option value="10">10 min</option><option value="15">15 min</option><option value="20">20 min</option><option value="30">30 min</option>
     </select>
+    <label for="timerSay" style="color:var(--ink)">When time's up, say</label>
+    <select id="timerSay" style="font:inherit;padding:6px;border:1.5px solid var(--line);border-radius:8px;background:var(--board);color:var(--ink)">
+      <option value="clean">"Clean up!"</option><option value="done">"All done!"</option><option value="none">Chime only</option>
+    </select>
+    <button class="btn" id="timerTest" type="button">&#128264; Test</button>
     <button class="btn primary" id="timerSave">Save</button>
     <button class="btn" id="timerCancel">Cancel</button>
-    <span class="hint" style="margin:0">Shows a countdown next to "Time for" while this activity is up, with a sound and a buzz when time's up. The learner still taps the slot to finish — nothing advances on its own.</span>
+    <span class="hint" style="margin:0">When this activity is up, a ▶ Start button appears next to "Time for" above the schedule. Press it to start the countdown; when time's up, a chime plays, the tablet says the phrase you picked out loud, and it buzzes where supported. The learner still taps the slot to finish — nothing advances on its own.</span>
   </div>
   <div class="row" style="border-top:1.5px solid var(--line);padding-top:10px">
     <label style="color:var(--ink)">Defaults</label>
@@ -236,7 +245,10 @@ const DEFAULT_TILES=[
   {id:'groomer',name:'Groomer',icon:'groomer'},{id:'baby',name:'Baby',icon:'baby'},{id:'animals',name:'Animals',icon:'animals'}
 ].sort((a,b)=>a.name.localeCompare(b.name));
 let S={tiles:DEFAULT_TILES.map(t=>({...t})),slots:[null,null,null,null],done:[],adult:false,lockNext:false,reward:'',rewardTile:null};
-let timerKey=null,timerInterval=null,timerEnd=0;
+let timerKey=null,timerInterval=null,timerEnd=0,timerMins=0,timerSayNow='clean',audioCtx=null;
+const SAY={clean:'Clean up!',done:'All done!',none:''};
+function speak(key){const txt=SAY[key];if(!txt||!window.speechSynthesis)return;try{speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(txt);u.lang='en-US';u.rate=.9;u.pitch=1.15;u.volume=1;const v=speechSynthesis.getVoices().find(x=>/^en(-|_)US/i.test(x.lang))||speechSynthesis.getVoices().find(x=>/^en/i.test(x.lang));if(v)u.voice=v;speechSynthesis.speak(u)}catch(e){}}
+function unlockSpeech(){try{if(window.speechSynthesis){const u=new SpeechSynthesisUtterance(' ');u.volume=0;speechSynthesis.speak(u)}}catch(e){}}
 const $=s=>document.querySelector(s);
 const art=t=>t.photo?`<img src="${t.photo}" alt="">`:ICON[t.icon];
 function logLine(){render();}
@@ -267,34 +279,42 @@ function render(){
   const finished=S.done.length&&!S.slots.some(Boolean);
   $('#timeforLead').textContent=nowIdx>=0?'Time for':(finished?'Time for':'Time to');
   $('#timeforWhat').textContent=nowIdx>=0?tileFor(S.slots[nowIdx].id).name:(finished?(S.rewardTile&&tileFor(S.rewardTile)?tileFor(S.rewardTile).name:(S.reward||'the Then item')):'pick!');
-  if(nowIdx>=0){const curTile=tileFor(S.slots[nowIdx].id);setupTimerFor(nowIdx+':'+curTile.id,curTile&&curTile.timerMin)}else{stopTimer()}
+  if(nowIdx>=0){const curTile=tileFor(S.slots[nowIdx].id);setupTimerFor(nowIdx+':'+curTile.id,curTile&&curTile.timerMin,curTile&&curTile.timerSay)}else{stopTimer()}
   window.claude?.hot?.snapshot?.(S);
 }
 let delArmed=null,timerEditId=null;
 function hideForms(){$('#newForm').hidden=true;$('#renForm').hidden=true;$('#timerForm').hidden=true}
-function stopTimer(){clearInterval(timerInterval);timerInterval=null;timerKey=null;const b=$('#timerBadge');if(b)b.hidden=true}
-function beep(){try{const ctx=new (window.AudioContext||window.webkitAudioContext)();const o=ctx.createOscillator();const g=ctx.createGain();o.connect(g);g.connect(ctx.destination);o.type='sine';o.frequency.value=740;g.gain.value=.0001;o.start();g.gain.exponentialRampToValueAtTime(.16,ctx.currentTime+.03);g.gain.exponentialRampToValueAtTime(.0001,ctx.currentTime+.9);o.stop(ctx.currentTime+.95)}catch(e){}}
+function stopTimer(){clearInterval(timerInterval);timerInterval=null;timerKey=null;const b=$('#timerBadge'),st=$('#timerStart');if(b)b.hidden=true;if(st)st.hidden=true}
+function beep(){try{const ctx=audioCtx||new (window.AudioContext||window.webkitAudioContext)();audioCtx=ctx;if(ctx.resume)ctx.resume();const o=ctx.createOscillator();const g=ctx.createGain();o.connect(g);g.connect(ctx.destination);o.type='sine';o.frequency.value=740;g.gain.value=.0001;o.start();g.gain.exponentialRampToValueAtTime(.16,ctx.currentTime+.03);g.gain.exponentialRampToValueAtTime(.0001,ctx.currentTime+.9);o.stop(ctx.currentTime+.95)}catch(e){}}
 function timerTick(){
   const remain=Math.max(0,Math.round((timerEnd-Date.now())/1000));
   const b=$('#timerBadge');if(!b)return;
   const m=Math.floor(remain/60),s=remain%60;
   b.textContent='⏱ '+m+':'+(s<10?'0':'')+s;
-  if(remain<=0){clearInterval(timerInterval);timerInterval=null;b.textContent='⏱ Time’s up';try{navigator.vibrate&&navigator.vibrate([220,120,220])}catch(e){}beep()}
+  if(remain<=0){clearInterval(timerInterval);timerInterval=null;b.textContent=SAY[timerSayNow]||'⏱ Done';try{navigator.vibrate&&navigator.vibrate([220,120,220])}catch(e){}beep();setTimeout(()=>speak(timerSayNow),900)}
 }
-function setupTimerFor(key,mins){
+function setupTimerFor(key,mins,say){
   if(timerKey===key)return;
   clearInterval(timerInterval);timerInterval=null;timerKey=key;
-  const b=$('#timerBadge');if(!b)return;
-  if(!mins){b.hidden=true;return}
-  timerEnd=Date.now()+mins*60000;b.hidden=false;timerTick();timerInterval=setInterval(timerTick,1000);
+  const b=$('#timerBadge'),st=$('#timerStart');if(!b||!st)return;
+  b.hidden=true;
+  if(!mins){st.hidden=true;return}
+  timerMins=mins;timerSayNow=say||'clean';st.textContent='▶ '+mins+':00';st.setAttribute('aria-label','Start '+mins+' minute timer');st.hidden=false;
 }
+function startTimer(){
+  if(!timerMins||timerInterval)return;
+  try{audioCtx=audioCtx||new (window.AudioContext||window.webkitAudioContext)();if(audioCtx.resume)audioCtx.resume()}catch(e){}
+  unlockSpeech();
+  timerEnd=Date.now()+timerMins*60000;$('#timerStart').hidden=true;$('#timerBadge').hidden=false;timerTick();timerInterval=setInterval(timerTick,1000);
+}
+$('#timerStart').addEventListener('click',e=>{e.stopPropagation();startTimer()});
 $('#grid').addEventListener('click',e=>{
   const hid=e.target.closest('[data-hide]');
   if(hid){e.stopPropagation();const t=tileFor(hid.dataset.hide);if(t){t.hidden=!t.hidden;S.slots=S.slots.map(x=>x&&x.id===t.id&&t.hidden?null:x);render();toast(t.hidden?`"${t.name}" hidden from the board`:`"${t.name}" back on the board`)}return}
   const ren=e.target.closest('[data-ren]');
-  if(ren){e.stopPropagation();const t=tileFor(ren.dataset.ren);if(!t)return;hideForms();renameId=t.id;$('#renPreview').innerHTML=art(t);$('#renName').value=t.name;$('#renForm').hidden=false;$('#renName').focus();$('#renName').select();return}
+  if(ren){e.stopPropagation();const t=tileFor(ren.dataset.ren);if(!t)return;hideForms();renameId=t.id;$('#renPreview').innerHTML=art(t);$('#renName').value=t.name;$('#renForm').hidden=false;$('#renForm').scrollIntoView({behavior:'smooth',block:'center'});$('#renName').focus();$('#renName').select();return}
   const tim=e.target.closest('[data-timer]');
-  if(tim){e.stopPropagation();const t=tileFor(tim.dataset.timer);if(!t)return;hideForms();timerEditId=t.id;$('#timerSel').value=String(t.timerMin||0);$('#timerForm').hidden=false;return}
+  if(tim){e.stopPropagation();const t=tileFor(tim.dataset.timer);if(!t)return;hideForms();timerEditId=t.id;$('#timerSel').value=String(t.timerMin||0);$('#timerSay').value=t.timerSay||'clean';$('#timerForm').hidden=false;$('#timerForm').scrollIntoView({behavior:'smooth',block:'center'});return}
   const del=e.target.closest('[data-del]');
   if(del){e.stopPropagation();const t=tileFor(del.dataset.del);if(!t)return;if(delArmed!==t.id){delArmed=t.id;toast(`Tap x again to remove "${t.name}"`);setTimeout(()=>{if(delArmed===t.id)delArmed=null},3000);return}delArmed=null;{S.tiles=S.tiles.filter(x=>x.id!==t.id);S.slots=S.slots.map(s=>s&&s.id===t.id?null:s);S.done=S.done.filter(id=>id!==t.id);logLine(`Removed activity "${t.name}"`)}return}
   const cam=e.target.closest('[data-cam]');
@@ -325,12 +345,13 @@ $('#nSlots').onchange=e=>{const n=Math.max(2,Math.min(8,+e.target.value||4));con
 $('#rewardSel').onchange=e=>{const v=e.target.value;if(v==='__custom__'){S.rewardTile=null;S.reward=S.reward||'';render();$('#rewardText').focus()}else{S.rewardTile=v||null;S.reward='';render()}};
 $('#rewardText').oninput=e=>{S.rewardTile=null;S.reward=e.target.value;render()};
 function save(){try{localStorage.setItem('pickandplay',JSON.stringify({tiles:S.tiles,reward:S.reward,rewardTile:S.rewardTile,n:S.slots.length}))}catch(e){}}
-function load(){try{const d=JSON.parse(localStorage.getItem('pickandplay')||'null');if(!d)return;if(Array.isArray(d.tiles)){const by=Object.fromEntries(d.tiles.map(t=>[t.id,t]));S.tiles=DEFAULT_TILES.map(t=>{const o=by[t.id]||{};return {...t,...(o.photo?{photo:o.photo}:{}),...(o.name&&o.name!==LEGACY_NAMES[t.id]?{name:o.name}:{}),...(o.hidden?{hidden:true}:{}),...(o.timerMin?{timerMin:o.timerMin}:{})}}).concat(d.tiles.filter(t=>t.custom));}S.reward=d.reward||'';S.rewardTile=d.rewardTile||null;if(d.n)S.slots=Array(d.n).fill(null)}catch(e){}}
+function load(){try{const d=JSON.parse(localStorage.getItem('pickandplay')||'null');if(!d)return;if(Array.isArray(d.tiles)){const by=Object.fromEntries(d.tiles.map(t=>[t.id,t]));S.tiles=DEFAULT_TILES.map(t=>{const o=by[t.id]||{};return {...t,...(o.photo?{photo:o.photo}:{}),...(o.name&&o.name!==LEGACY_NAMES[t.id]?{name:o.name}:{}),...(o.hidden?{hidden:true}:{}),...(o.timerMin?{timerMin:o.timerMin}:{}),...(o.timerSay?{timerSay:o.timerSay}:{})}}).concat(d.tiles.filter(t=>t.custom));}S.reward=d.reward||'';S.rewardTile=d.rewardTile||null;if(d.n)S.slots=Array(d.n).fill(null)}catch(e){}}
 let renameId=null,restoreArmed=null;
 $('#renSave').onclick=()=>{const t=tileFor(renameId);const name=$('#renName').value.trim();if(!t||!name){$('#renName').focus();return}t.name=name;renameId=null;$('#renForm').hidden=true;render();toast(`Renamed to "${name}"`)};
 $('#renCancel').onclick=()=>{renameId=null;$('#renForm').hidden=true};
 $('#renName').onkeydown=e=>{if(e.key==='Enter')$('#renSave').click()};
-$('#timerSave').onclick=()=>{const t=tileFor(timerEditId);const v=+$('#timerSel').value;if(t){if(v>0)t.timerMin=v;else delete t.timerMin}timerEditId=null;$('#timerForm').hidden=true;render();toast(v>0?`Timer set to ${v} min`:'Timer turned off')};
+$('#timerSave').onclick=()=>{const t=tileFor(timerEditId);const v=+$('#timerSel').value;if(t){if(v>0){t.timerMin=v;t.timerSay=$('#timerSay').value}else{delete t.timerMin;delete t.timerSay}}timerEditId=null;$('#timerForm').hidden=true;render();toast(v>0?`Timer set to ${v} min`:'Timer turned off')};
+$('#timerTest').onclick=()=>{beep();setTimeout(()=>speak($('#timerSay').value),900)};
 $('#timerCancel').onclick=()=>{timerEditId=null;$('#timerForm').hidden=true};
 $('#btnShowAll').onclick=()=>{S.tiles.forEach(t=>t.hidden=false);render();toast('All tiles shown')};
 $('#btnRestore').onclick=()=>{const b=$('#btnRestore');if(restoreArmed){clearTimeout(restoreArmed);restoreArmed=null;b.textContent='Restore built-in tiles';S.tiles=DEFAULT_TILES.map(t=>({...t}));S.slots=Array(S.slots.length).fill(null);S.done=[];S.rewardTile=null;S.reward='';render();toast('Built-in tiles restored');return}
@@ -345,7 +366,7 @@ $('#fileIn').onchange=e=>{
   const r=new FileReader();
   r.onload=()=>shrink(r.result,photo=>{
     if(target==='__new__'){
-      hideForms();pendingPhoto=photo;$('#newPreview').src=photo;$('#newName').value='';$('#newForm').hidden=false;$('#newName').focus();
+      hideForms();pendingPhoto=photo;$('#newPreview').src=photo;$('#newName').value='';$('#newForm').hidden=false;$('#newForm').scrollIntoView({behavior:'smooth',block:'center'});$('#newName').focus();
     }else{const t=tileFor(target);if(t){t.photo=photo;logLine(`Photo replaced on "${t.name}"`);render()}}
   });
   r.readAsDataURL(f);

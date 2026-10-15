@@ -219,7 +219,7 @@ body.adult .adultbar{display:block}
   <div class="row" id="timerForm" hidden style="background:var(--tile);border:1.5px solid var(--line);border-radius:12px;padding:10px">
     <label for="timerSel" style="color:var(--ink)">Timer for this activity</label>
     <select id="timerSel" style="font:inherit;padding:6px;border:1.5px solid var(--line);border-radius:8px;background:var(--board);color:var(--ink)">
-      <option value="0">Off</option><option value="1">1 min</option><option value="2">2 min</option><option value="3">3 min</option>
+      <option value="def" id="timerSelDef">Default</option><option value="0">Off</option><option value="1">1 min</option><option value="2">2 min</option><option value="3">3 min</option>
       <option value="5">5 min</option><option value="10">10 min</option><option value="15">15 min</option><option value="20">20 min</option><option value="30">30 min</option>
     </select>
     <label for="timerSay" style="color:var(--ink)">When time's up, play</label>
@@ -240,6 +240,13 @@ body.adult .adultbar{display:block}
       <div class="pcard" data-p="2"><button class="pav" data-pphoto="2" type="button" title="Add a photo"></button><div class="pfields"><input type="text" class="pname" data-pname="2" maxlength="12" placeholder="Name"><div class="swatches" data-pswatch="2"></div></div><button class="btn pclr" data-pclear="2" type="button" title="Remove photo">Remove photo</button></div>
       <span class="hint" style="margin:0;flex-basis:100%">Tap the circle to add a photo. While picking, each child taps their own picture (My turn) and then an activity, so every slot shows who chose it. They do every activity together. Hold Adult's turn for an adult pick.</span>
     </div>
+  </div>
+  <div class="row" id="defTimerRow" style="border-top:1.5px solid var(--line);padding-top:10px">
+    <label for="defMin" style="color:var(--ink)">Default timer</label>
+    <select id="defMin" style="font:inherit;padding:6px;border:1.5px solid var(--line);border-radius:8px;background:var(--board);color:var(--ink)"><option value="0">Off</option><option value="1">1 min</option><option value="2">2 min</option><option value="3">3 min</option><option value="5">5 min</option><option value="10">10 min</option><option value="15">15 min</option><option value="20">20 min</option><option value="30">30 min</option></select>
+    <label for="defSay" style="color:var(--ink)">then play</label>
+    <select id="defSay" style="font:inherit;padding:6px;border:1.5px solid var(--line);border-radius:8px;background:var(--board);color:var(--ink)"><option value="clean">Chime + "Clean up!" recording</option><option value="done">Chime + "All done!" recording</option><option value="none">Chime only</option></select>
+    <span class="hint" style="margin:0;flex-basis:100%">Every activity gets this timer. To give one activity a different time, or none, tap the clock on its tile. A plain, light clock means the activity uses the default; a clock with a number (or "off") has its own setting.</span>
   </div>
   <div class="row" id="voiceRow" style="border-top:1.5px solid var(--line);padding-top:10px">
     <label style="color:var(--ink)">Voice prompts</label>
@@ -337,12 +344,13 @@ const DEFAULT_TILES=[
   {id:'kitchen',name:'Kitchen',icon:'kitchen'},{id:'shopping',name:'Shopping',icon:'shopping'},{id:'exercise',name:'Exercise',icon:'exercise'},
   {id:'groomer',name:'Groomer',icon:'groomer'},{id:'baby',name:'Baby',icon:'baby'},{id:'animals',name:'Animals',icon:'animals'}
 ].sort((a,b)=>a.name.localeCompare(b.name));
-let S={tiles:DEFAULT_TILES.map(t=>({...t})),slots:[null,null,null,null],done:[],doneBy:[],adult:false,lockNext:false,reward:'',rewardTile:null,turn:null,
+let S={tiles:DEFAULT_TILES.map(t=>({...t})),slots:[null,null,null,null],done:[],doneBy:[],adult:false,lockNext:false,reward:'',rewardTile:null,turn:null,defTimer:{min:3,say:'clean'},
   pair:{on:false,count:2,players:[{name:'',color:'#2A60A6',photo:null},{name:'',color:'#C2570C',photo:null},{name:'',color:'#3E7D1E',photo:null}]}};
 const PCOLORS=['#2A60A6','#C2570C','#3E7D1E','#A0407F','#6E3FA3','#C0392B'];
 const pName=i=>(S.pair.players[i].name||'').trim()||('Child '+(i+1));
 const pAv=(i,cls)=>{const pl=S.pair.players[i];return pl.photo?`<img src="${pl.photo}" alt="">`:esc(pName(i).charAt(0).toUpperCase())};
 const esc=x=>String(x).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+function effTimer(t){if(!t)return {min:0,say:'clean'};if(t.timerMin!=null)return {min:+t.timerMin||0,say:t.timerSay||'clean'};return {min:S.defTimer.min,say:S.defTimer.say}}
 function whoChip(i){return `<span class="who" style="--pc:${S.pair.players[i].color}"><span class="dot">${pAv(i)}</span>${esc(pName(i))}</span>`}
 let timerKey=null,timerInterval=null,timerEnd=0,timerMins=0,timerSayNow='clean',audioCtx=null;
 const SAY={clean:'Clean up!',done:'All done!',none:''};
@@ -383,7 +391,7 @@ function render(){
   $('#rewardText').hidden=cur!=='__custom__';
   save();
   S.tiles.sort((a,b)=>a.name.localeCompare(b.name));
-  $('#grid').innerHTML=S.tiles.filter(t=>S.adult||!t.hidden).map(t=>`<button class="tile ${placed(t.id)?'used':''} ${t.hidden?'hiddenTile':''}" data-id="${t.id}" aria-label="${t.name}"><span class="art">${art(t)}</span><span class="name">${t.name}</span><span class="cam" data-cam="${t.id}" title="Replace photo">&#128247;</span>${t.custom?`<span class="cam del" data-del="${t.id}" title="Remove activity">&#10005;</span>`:`<span class="cam eye" data-hide="${t.id}" title="${t.hidden?'Show on board':'Hide from board'}">${t.hidden?'&#9711;':'&#9673;'}</span>`}<span class="cam pen" data-ren="${t.id}" title="Rename">&#9998;</span><span class="cam clock" data-timer="${t.id}" title="Set a timer">&#9201;${t.timerMin?t.timerMin+'m':''}</span></button>`).join('')
+  $('#grid').innerHTML=S.tiles.filter(t=>S.adult||!t.hidden).map(t=>`<button class="tile ${placed(t.id)?'used':''} ${t.hidden?'hiddenTile':''}" data-id="${t.id}" aria-label="${t.name}"><span class="art">${art(t)}</span><span class="name">${t.name}</span><span class="cam" data-cam="${t.id}" title="Replace photo">&#128247;</span>${t.custom?`<span class="cam del" data-del="${t.id}" title="Remove activity">&#10005;</span>`:`<span class="cam eye" data-hide="${t.id}" title="${t.hidden?'Show on board':'Hide from board'}">${t.hidden?'&#9711;':'&#9673;'}</span>`}<span class="cam pen" data-ren="${t.id}" title="Rename">&#9998;</span><span class="cam clock" data-timer="${t.id}" title="Set a timer" style="${t.timerMin==null?'opacity:.6':''}">&#9201;${t.timerMin==null?'':(t.timerMin?t.timerMin+'m':'off')}</span></button>`).join('')
     +(S.adult?`<button class="tile add" id="addTile" aria-label="Add activity"><span class="art">${ICON.plus}</span><span class="name">Add activity</span></button>`:'');
   const nowIdx=S.slots.findIndex(s=>s);
   $('#slots').innerHTML=S.slots.map((s,i)=>{
@@ -402,7 +410,7 @@ function render(){
     if(S.turn!=null){$('#timeforLead').textContent=pName(S.turn)+"'s turn:";$('#timeforWhat').textContent='pick an activity!'}else{$('#timeforLead').textContent='Who is';$('#timeforWhat').textContent='picking?'}}
   else if(wp){wp.remove()}
   renderTurns();
-  if(nowIdx>=0){const curTile=tileFor(S.slots[nowIdx].id);setupTimerFor(nowIdx+':'+curTile.id,curTile&&curTile.timerMin,curTile&&curTile.timerSay)}else{stopTimer()}
+  if(nowIdx>=0){const curTile=tileFor(S.slots[nowIdx].id);setupTimerFor(nowIdx+':'+curTile.id,effTimer(curTile).min,effTimer(curTile).say)}else{stopTimer()}
   window.claude?.hot?.snapshot?.(S);
 }
 let delArmed=null,timerEditId=null;
@@ -417,7 +425,7 @@ function timerTick(){
   if(remain<=0){clearInterval(timerInterval);timerInterval=null;b.textContent=SAY[timerSayNow]||'⏱ Done';try{navigator.vibrate&&navigator.vibrate([220,120,220])}catch(e){}beep();setTimeout(()=>playVoice(timerSayNow),900)}
 }
 function setupTimerFor(key,mins,say){
-  if(timerKey===key)return;
+  if(timerKey===key&&(timerInterval||(timerMins===(mins||0)&&timerSayNow===(say||'clean'))))return;
   clearInterval(timerInterval);timerInterval=null;timerKey=key;
   const b=$('#timerBadge'),st=$('#timerStart');if(!b||!st)return;
   b.hidden=true;
@@ -436,7 +444,7 @@ $('#grid').addEventListener('click',e=>{
   const ren=e.target.closest('[data-ren]');
   if(ren){e.stopPropagation();const t=tileFor(ren.dataset.ren);if(!t)return;hideForms();renameId=t.id;$('#renPreview').innerHTML=art(t);$('#renName').value=t.name;$('#renForm').hidden=false;$('#renForm').scrollIntoView({behavior:'smooth',block:'center'});$('#renName').focus();$('#renName').select();return}
   const tim=e.target.closest('[data-timer]');
-  if(tim){e.stopPropagation();const t=tileFor(tim.dataset.timer);if(!t)return;hideForms();timerEditId=t.id;$('#timerSel').value=String(t.timerMin||0);$('#timerSay').value=t.timerSay||'clean';$('#timerForm').hidden=false;$('#timerForm').scrollIntoView({behavior:'smooth',block:'center'});return}
+  if(tim){e.stopPropagation();const t=tileFor(tim.dataset.timer);if(!t)return;hideForms();timerEditId=t.id;$('#timerSelDef').textContent='Default ('+(S.defTimer.min?S.defTimer.min+' min':'off')+')';$('#timerSel').value=t.timerMin==null?'def':String(t.timerMin);$('#timerSay').value=t.timerMin==null?S.defTimer.say:(t.timerSay||'clean');$('#timerForm').hidden=false;$('#timerForm').scrollIntoView({behavior:'smooth',block:'center'});return}
   const del=e.target.closest('[data-del]');
   if(del){e.stopPropagation();const t=tileFor(del.dataset.del);if(!t)return;if(delArmed!==t.id){delArmed=t.id;toast(`Tap x again to remove "${t.name}"`);setTimeout(()=>{if(delArmed===t.id)delArmed=null},3000);return}delArmed=null;{S.tiles=S.tiles.filter(x=>x.id!==t.id);S.slots=S.slots.map(s=>s&&s.id===t.id?null:s);{const keep=S.done.map(id=>id!==t.id);S.doneBy=S.doneBy.filter((_,k)=>keep[k]);S.done=S.done.filter(id=>id!==t.id)}logLine(`Removed activity "${t.name}"`)}return}
   const cam=e.target.closest('[data-cam]');
@@ -479,13 +487,13 @@ $('#btnReset').onclick=()=>{const b=$('#btnReset');if(resetArmed){clearTimeout(r
 $('#nSlots').onchange=e=>{const n=Math.max(2,Math.min(8,+e.target.value||4));const f=S.slots.filter(Boolean).slice(0,n);S.slots=Array(n).fill(null).map((_,i)=>f[i]||null);logLine('Slots set to '+n)};
 $('#rewardSel').onchange=e=>{const v=e.target.value;if(v==='__custom__'){S.rewardTile=null;S.reward=S.reward||'';render();$('#rewardText').focus()}else{S.rewardTile=v||null;S.reward='';render()}};
 $('#rewardText').oninput=e=>{S.rewardTile=null;S.reward=e.target.value;render()};
-function save(){try{localStorage.setItem('pickandplay',JSON.stringify({tiles:S.tiles,reward:S.reward,rewardTile:S.rewardTile,n:S.slots.length,pair:S.pair}))}catch(e){}}
-function load(){try{const d=JSON.parse(localStorage.getItem('pickandplay')||'null');if(!d)return;if(Array.isArray(d.tiles)){const by=Object.fromEntries(d.tiles.map(t=>[t.id,t]));S.tiles=DEFAULT_TILES.map(t=>{const o=by[t.id]||{};return {...t,...(o.photo?{photo:o.photo}:{}),...(o.name&&o.name!==LEGACY_NAMES[t.id]?{name:o.name}:{}),...(o.hidden?{hidden:true}:{}),...(o.timerMin?{timerMin:o.timerMin}:{}),...(o.timerSay?{timerSay:o.timerSay}:{})}}).concat(d.tiles.filter(t=>t.custom));}S.reward=d.reward||'';S.rewardTile=d.rewardTile||null;if(d.n)S.slots=Array(d.n).fill(null);if(d.pair&&Array.isArray(d.pair.players)){const def=S.pair.players;S.pair={...S.pair,...d.pair};S.pair.players=[0,1,2].map(k=>d.pair.players[k]||def[k]);S.pair.count=d.pair.count===3?3:2}}catch(e){}}
+function save(){try{localStorage.setItem('pickandplay',JSON.stringify({tiles:S.tiles,reward:S.reward,rewardTile:S.rewardTile,n:S.slots.length,pair:S.pair,defTimer:S.defTimer}))}catch(e){}}
+function load(){try{const d=JSON.parse(localStorage.getItem('pickandplay')||'null');if(!d)return;if(Array.isArray(d.tiles)){const by=Object.fromEntries(d.tiles.map(t=>[t.id,t]));S.tiles=DEFAULT_TILES.map(t=>{const o=by[t.id]||{};return {...t,...(o.photo?{photo:o.photo}:{}),...(o.name&&o.name!==LEGACY_NAMES[t.id]?{name:o.name}:{}),...(o.hidden?{hidden:true}:{}),...(o.timerMin!=null?{timerMin:o.timerMin}:{}),...(o.timerSay?{timerSay:o.timerSay}:{})}}).concat(d.tiles.filter(t=>t.custom));}S.reward=d.reward||'';if(d.defTimer&&typeof d.defTimer.min==='number')S.defTimer={min:d.defTimer.min,say:d.defTimer.say||'clean'};S.rewardTile=d.rewardTile||null;if(d.n)S.slots=Array(d.n).fill(null);if(d.pair&&Array.isArray(d.pair.players)){const def=S.pair.players;S.pair={...S.pair,...d.pair};S.pair.players=[0,1,2].map(k=>d.pair.players[k]||def[k]);S.pair.count=d.pair.count===3?3:2}}catch(e){}}
 let renameId=null,restoreArmed=null;
 $('#renSave').onclick=()=>{const t=tileFor(renameId);const name=$('#renName').value.trim();if(!t||!name){$('#renName').focus();return}t.name=name;renameId=null;$('#renForm').hidden=true;render();toast(`Renamed to "${name}"`)};
 $('#renCancel').onclick=()=>{renameId=null;$('#renForm').hidden=true};
 $('#renName').onkeydown=e=>{if(e.key==='Enter')$('#renSave').click()};
-$('#timerSave').onclick=()=>{const t=tileFor(timerEditId);const v=+$('#timerSel').value;if(t){if(v>0){t.timerMin=v;t.timerSay=$('#timerSay').value}else{delete t.timerMin;delete t.timerSay}}timerEditId=null;$('#timerForm').hidden=true;render();toast(v>0?`Timer set to ${v} min`:'Timer turned off')};
+$('#timerSave').onclick=()=>{const t=tileFor(timerEditId);const raw=$('#timerSel').value;if(t){if(raw==='def'){delete t.timerMin;delete t.timerSay}else if(+raw>0){t.timerMin=+raw;t.timerSay=$('#timerSay').value}else{t.timerMin=0;delete t.timerSay}}timerEditId=null;$('#timerForm').hidden=true;render();toast(raw==='def'?'Uses the default timer':(+raw>0?`Timer set to ${raw} min`:'No timer for this activity'))};
 $('#timerTest').onclick=()=>{const k=$('#timerSay').value;beep();if(k!=='none'&&!(VOICE[k]&&VOICE[k].url))toast('No recording yet: record it under Voice prompts');setTimeout(()=>playVoice(k),900)};
 $('#voiceRow').addEventListener('click',e=>{const r=e.target.closest('[data-vrec]'),pl=e.target.closest('[data-vplay]'),dl=e.target.closest('[data-vdel]');
   if(r){startRec(r.dataset.vrec)}else if(pl){playVoice(pl.dataset.vplay)}else if(dl){delete VOICE[dl.dataset.vdel];saveVoice();renderVoice();toast('Recording deleted')}});
@@ -509,7 +517,7 @@ $('#fileIn').onchange=e=>{
   });
   r.readAsDataURL(f);
 };
-function setupData(){return {app:'pickandplay',version:1,exported:new Date().toISOString(),settings:{tiles:S.tiles,reward:S.reward,rewardTile:S.rewardTile,n:S.slots.length,pair:S.pair},voice:VOICE}}
+function setupData(){return {app:'pickandplay',version:1,exported:new Date().toISOString(),settings:{tiles:S.tiles,reward:S.reward,rewardTile:S.rewardTile,n:S.slots.length,pair:S.pair,defTimer:S.defTimer},voice:VOICE}}
 $('#btnExport').onclick=async()=>{
   const d=new Date(),name='pick-and-play-setup-'+d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')+'.json';
   const blob=new Blob([JSON.stringify(setupData())],{type:'application/json'});
@@ -526,8 +534,10 @@ $('#setupIn').onchange=e=>{const f=e.target.files[0];e.target.value='';if(!f)ret
     S.tiles=DEFAULT_TILES.map(t=>({...t}));S.done=[];S.doneBy=[];S.lockNext=false;S.turn=null;load();fixColors();renderVoice();$('#nSlots').value=S.slots.length;$('#rewardText').value=S.reward;render();
     toast('Setup loaded');logLine('Loaded setup file');};
   r.readAsText(f)};
+$('#defMin').onchange=e=>{S.defTimer.min=+e.target.value;render();toast(S.defTimer.min?`Default timer: ${S.defTimer.min} min`:'Default timer off')};
+$('#defSay').onchange=e=>{S.defTimer.say=e.target.value;render()};
 function fixColors(){const used=new Set();for(let k=0;k<S.pair.count;k++){const pl=S.pair.players[k];if(used.has(pl.color))pl.color=PCOLORS.find(c=>!used.has(c));used.add(pl.color)}}
-function renderTurns(){const on=S.pair.on;$('#turnsOn').checked=on;$('#turnsSetup').hidden=!on;$('#turnsCountWrap').hidden=!on;$('#turnsCount').value=String(S.pair.count);
+function renderTurns(){$('#defMin').value=String(S.defTimer.min);$('#defSay').value=S.defTimer.say;const on=S.pair.on;$('#turnsOn').checked=on;$('#turnsSetup').hidden=!on;$('#turnsCountWrap').hidden=!on;$('#turnsCount').value=String(S.pair.count);
   document.querySelectorAll('.pcard').forEach(c=>{const i=+c.dataset.p,pl=S.pair.players[i];c.hidden=i>=S.pair.count;c.style.setProperty('--pc',pl.color);const av=c.querySelector('.pav');av.innerHTML=pl.photo?`<img src="${pl.photo}" alt="">`:(esc(pName(i).charAt(0).toUpperCase())+'<span style="position:absolute;font-size:0">add photo</span>');
     const nm=c.querySelector('.pname');if(document.activeElement!==nm)nm.value=pl.name||'';nm.placeholder='Child '+(i+1)+' name';
     c.querySelector('.swatches').innerHTML=PCOLORS.map(col=>`<button type="button" data-col="${col}" style="background:${col}" aria-label="Color" aria-pressed="${col===pl.color}"></button>`).join('');c.querySelector('.pclr').hidden=!pl.photo});

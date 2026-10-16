@@ -42,6 +42,9 @@ h1{font-size:1.15rem;font-weight:800;margin:0;letter-spacing:.01em}
 .timefor .what{font-weight:800;font-size:2rem;line-height:1.1;margin-left:.3em}
 [hidden]{display:none!important}
 .strip h2.stripHead{display:flex;align-items:center;justify-content:space-between;gap:6px;flex-wrap:nowrap}
+.timerBadge.ringing{animation:ring .8s ease-in-out 7}
+@keyframes ring{0%,100%{transform:scale(1)}50%{transform:scale(1.18);box-shadow:0 0 0 6px rgba(227,155,46,.45)}}
+@media (prefers-reduced-motion:reduce){.timerBadge.ringing{animation:none;outline:3px solid var(--accent-ink)}}
 .timerBadge{display:inline-flex;align-items:center;padding:4px 10px;border-radius:999px;background:var(--accent);color:var(--accent-ink);font-size:.95rem;font-weight:800;white-space:nowrap}
 .timerStart{font:inherit;font-size:.95rem;font-weight:800;display:inline-flex;align-items:center;gap:4px;padding:4px 10px;min-height:36px;border-radius:999px;border:2px solid var(--accent);background:var(--strip-text);color:var(--strip);cursor:pointer;white-space:nowrap}
 .holds{display:flex;gap:6px;flex-wrap:wrap}
@@ -90,6 +93,20 @@ body.adult .holds,body.picklock .holds{visibility:hidden}
 .btn[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
 .layout{display:grid;grid-template-columns:minmax(0,1fr) 236px;gap:16px;align-items:start}
 @media (max-width:640px){.layout{grid-template-columns:1fr}}
+/* Schedule-only view on tablets: once every slot is filled, the choice board steps aside (Edit brings it back) */
+@media (min-width:641px){
+  body.doing:not(.adult) .layout{grid-template-columns:minmax(0,560px);justify-content:center}
+  body.doing:not(.adult) .board{display:none}
+  body.doing:not(.adult) .top .sub{display:none}
+  body.doing:not(.adult) .slot:not(.filled){display:none}
+  body.doing:not(.adult) .strip{padding:18px;gap:14px}
+  body.doing:not(.adult) .stripHead{font-size:1.3rem}
+  body.doing:not(.adult) .slot{min-height:100px}
+  body.doing:not(.adult) .slot .art{width:88px;height:88px}
+  body.doing:not(.adult) .slot .name{font-size:1.4rem}
+  body.doing:not(.adult) .pocket .chip{font-size:1.1rem}
+  body.doing:not(.adult) .reward{font-size:1.3rem;padding:14px}
+}
 .board{background:var(--board);border:1.5px solid var(--line);border-radius:16px;padding:14px}
 .board h2,.strip h2,.pocket h2{font-size:.78rem;text-transform:uppercase;letter-spacing:.08em;margin:0 0 10px;color:var(--muted)}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(124px,1fr));gap:10px}
@@ -188,9 +205,9 @@ body.adult .adultbar{display:block}
   <aside class="strip" aria-label="Schedule">
     <h2 class="stripHead"><span style="white-space:nowrap">Time for</span><button class="timerStart" id="timerStart" hidden aria-label="Start timer"></button><span class="timerBadge" id="timerBadge" hidden aria-live="polite"></span></h2>
     <div id="slots" style="display:flex;flex-direction:column;gap:10px"></div>
+    <div class="reward" id="reward">Then: tap Edit to set</div>
     <h2 style="margin-top:6px">Finished</h2>
     <div class="pocket" id="pocket"></div>
-    <div class="reward" id="reward">Then: tap Edit to set</div>
   </aside>
 </div>
 
@@ -416,13 +433,20 @@ function render(){
 let delArmed=null,timerEditId=null;
 function hideForms(){$('#newForm').hidden=true;$('#renForm').hidden=true;$('#timerForm').hidden=true}
 function stopTimer(){clearInterval(timerInterval);timerInterval=null;timerKey=null;const b=$('#timerBadge'),st=$('#timerStart');if(b)b.hidden=true;if(st)st.hidden=true}
-function beep(){try{const ctx=window.ctx?window.ctx():audioCtx;const o=ctx.createOscillator();const g=ctx.createGain();o.connect(g);g.connect(ctx.destination);o.type='sine';o.frequency.value=740;g.gain.value=.0001;o.start();g.gain.exponentialRampToValueAtTime(.16,ctx.currentTime+.03);g.gain.exponentialRampToValueAtTime(.0001,ctx.currentTime+.9);o.stop(ctx.currentTime+.95)}catch(e){}}
+const ALARM_SEC=3.2;
+function beep(){try{const ctx=window.ctx?window.ctx():audioCtx;const t0=ctx.currentTime+.05;
+  // alarm: 4 rings of a two-note "ding-dong", about 3 seconds in all
+  for(let r=0;r<4;r++){[[988,0],[784,.22]].forEach(([f,dt])=>{const st=t0+r*.8+dt;const o=ctx.createOscillator(),g=ctx.createGain();o.type='triangle';o.frequency.value=f;o.connect(g);g.connect(ctx.destination);
+    g.gain.setValueAtTime(.0001,st);g.gain.exponentialRampToValueAtTime(.32,st+.02);g.gain.exponentialRampToValueAtTime(.0001,st+.5);o.start(st);o.stop(st+.55)})}
+}catch(e){}
+  const b=$('#timerBadge');if(b){b.classList.remove('ringing');void b.offsetWidth;b.classList.add('ringing');setTimeout(()=>b.classList.remove('ringing'),6000)}
+}
 function timerTick(){
   const remain=Math.max(0,Math.round((timerEnd-Date.now())/1000));
   const b=$('#timerBadge');if(!b)return;
   const m=Math.floor(remain/60),s=remain%60;
   b.textContent='⏱ '+m+':'+(s<10?'0':'')+s;
-  if(remain<=0){clearInterval(timerInterval);timerInterval=null;b.textContent=SAY[timerSayNow]||'⏱ Done';try{navigator.vibrate&&navigator.vibrate([220,120,220])}catch(e){}beep();setTimeout(()=>playVoice(timerSayNow),900)}
+  if(remain<=0){clearInterval(timerInterval);timerInterval=null;b.textContent=SAY[timerSayNow]||'⏱ Done';try{navigator.vibrate&&navigator.vibrate([400,200,400,200,400,200,400])}catch(e){}beep();setTimeout(()=>playVoice(timerSayNow),ALARM_SEC*1000+300)}
 }
 function setupTimerFor(key,mins,say){
   if(timerKey===key&&(timerInterval||(timerMins===(mins||0)&&timerSayNow===(say||'clean'))))return;
@@ -494,7 +518,7 @@ $('#renSave').onclick=()=>{const t=tileFor(renameId);const name=$('#renName').va
 $('#renCancel').onclick=()=>{renameId=null;$('#renForm').hidden=true};
 $('#renName').onkeydown=e=>{if(e.key==='Enter')$('#renSave').click()};
 $('#timerSave').onclick=()=>{const t=tileFor(timerEditId);const raw=$('#timerSel').value;if(t){if(raw==='def'){delete t.timerMin;delete t.timerSay}else if(+raw>0){t.timerMin=+raw;t.timerSay=$('#timerSay').value}else{t.timerMin=0;delete t.timerSay}}timerEditId=null;$('#timerForm').hidden=true;render();toast(raw==='def'?'Uses the default timer':(+raw>0?`Timer set to ${raw} min`:'No timer for this activity'))};
-$('#timerTest').onclick=()=>{const k=$('#timerSay').value;beep();if(k!=='none'&&!(VOICE[k]&&VOICE[k].url))toast('No recording yet: record it under Voice prompts');setTimeout(()=>playVoice(k),900)};
+$('#timerTest').onclick=()=>{const k=$('#timerSay').value;beep();if(k!=='none'&&!(VOICE[k]&&VOICE[k].url))toast('No recording yet: record it under Voice prompts');setTimeout(()=>playVoice(k),ALARM_SEC*1000+300)};
 $('#voiceRow').addEventListener('click',e=>{const r=e.target.closest('[data-vrec]'),pl=e.target.closest('[data-vplay]'),dl=e.target.closest('[data-vdel]');
   if(r){startRec(r.dataset.vrec)}else if(pl){playVoice(pl.dataset.vplay)}else if(dl){delete VOICE[dl.dataset.vdel];saveVoice();renderVoice();toast('Recording deleted')}});
 $('#timerCancel').onclick=()=>{timerEditId=null;$('#timerForm').hidden=true};

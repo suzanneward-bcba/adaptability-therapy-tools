@@ -135,6 +135,13 @@ body.adult .tile .cam{display:block}
 .slot .name{font-weight:800;font-size:.95rem;line-height:1.1}
 .slot .num{position:absolute;left:-4px;top:-6px;background:var(--accent);color:var(--accent-ink);font-size:.7rem;font-weight:800;border-radius:999px;padding:1px 7px}
 .slot .badge{position:absolute;right:6px;bottom:4px;font-size:.65rem;font-weight:800;padding:1px 6px;border-radius:999px}
+.slot .waitIcon{position:absolute;top:6px;right:8px;font-size:1.05rem;line-height:1;opacity:.85}
+.slot.waiting{cursor:default}
+.slot.ready{box-shadow:0 0 0 4px var(--accent),0 0 14px 4px rgba(227,155,46,.55)}
+.slot.shake{animation:shake .35s ease 1}
+@keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-5px)}75%{transform:translateX(5px)}}
+#timerStart.nudge,#timerBadge.nudge{animation:ring .8s ease-in-out 2}
+@media (prefers-reduced-motion:reduce){.slot.shake,#timerStart.nudge,#timerBadge.nudge{animation:none}}
 .slot .badge.lock{background:var(--lock-bg);color:var(--lock)}
 .slot .empty{opacity:.7;font-size:.8rem}
 .pocket{background:var(--pocket);border-radius:14px;padding:10px;min-height:70px;display:flex;flex-wrap:wrap;gap:6px;align-items:center}
@@ -264,6 +271,8 @@ body.adult .adultbar{display:block}
     <label for="defSay" style="color:var(--ink)">then play</label>
     <select id="defSay" style="font:inherit;padding:6px;border:1.5px solid var(--line);border-radius:8px;background:var(--board);color:var(--ink)"><option value="clean">Chime + "Clean up!" recording</option><option value="done">Chime + "All done!" recording</option><option value="none">Chime only</option></select>
     <span class="hint" style="margin:0;flex-basis:100%">Every activity gets this timer. To give one activity a different time, or none, tap the clock on its tile. A plain, light clock means the activity uses the default; a clock with a number (or "off") has its own setting.</span>
+    <label style="color:var(--ink);display:inline-flex;align-items:center;gap:6px;flex-basis:100%"><input type="checkbox" id="waitTimer"> Finish only after the timer goes off</label>
+    <span class="hint" style="margin:0;flex-basis:100%">When this is on, the top activity can't be tapped done until its timer has rung (an hourglass shows on it, and it glows once time is up). An adult can still finish it early: hold Edit, then tap it.</span>
   </div>
   <div class="row" id="voiceRow" style="border-top:1.5px solid var(--line);padding-top:10px">
     <label style="color:var(--ink)">Voice prompts</label>
@@ -361,15 +370,17 @@ const DEFAULT_TILES=[
   {id:'kitchen',name:'Kitchen',icon:'kitchen'},{id:'shopping',name:'Shopping',icon:'shopping'},{id:'exercise',name:'Exercise',icon:'exercise'},
   {id:'groomer',name:'Groomer',icon:'groomer'},{id:'baby',name:'Baby',icon:'baby'},{id:'animals',name:'Animals',icon:'animals'}
 ].sort((a,b)=>a.name.localeCompare(b.name));
-let S={tiles:DEFAULT_TILES.map(t=>({...t})),slots:[null,null,null,null],done:[],doneBy:[],adult:false,lockNext:false,reward:'',rewardTile:null,turn:null,defTimer:{min:3,say:'clean'},
+let S={tiles:DEFAULT_TILES.map(t=>({...t})),slots:[null,null,null,null],done:[],doneBy:[],adult:false,lockNext:false,reward:'',rewardTile:null,turn:null,defTimer:{min:3,say:'clean'},waitTimer:true,
   pair:{on:false,count:2,players:[{name:'',color:'#2A60A6',photo:null},{name:'',color:'#C2570C',photo:null},{name:'',color:'#3E7D1E',photo:null}]}};
 const PCOLORS=['#2A60A6','#C2570C','#3E7D1E','#A0407F','#6E3FA3','#C0392B'];
 const pName=i=>(S.pair.players[i].name||'').trim()||('Child '+(i+1));
 const pAv=(i,cls)=>{const pl=S.pair.players[i];return pl.photo?`<img src="${pl.photo}" alt="">`:esc(pName(i).charAt(0).toUpperCase())};
 const esc=x=>String(x).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 function effTimer(t){if(!t)return {min:0,say:'clean'};if(t.timerMin!=null)return {min:+t.timerMin||0,say:t.timerSay||'clean'};return {min:S.defTimer.min,say:S.defTimer.say}}
+function isWaiting(){if(!S.waitTimer)return false;const i=S.slots.findIndex(x=>x);if(i<0)return false;const t=tileFor(S.slots[i].id);if(!t||!effTimer(t).min)return false;return !(timerKey===i+':'+t.id&&timerDone)}
+function isReady(){const i=S.slots.findIndex(x=>x);if(i<0)return false;const t=tileFor(S.slots[i].id);return !!(t&&effTimer(t).min&&timerKey===i+':'+t.id&&timerDone)}
 function whoChip(i){return `<span class="who" style="--pc:${S.pair.players[i].color}"><span class="dot">${pAv(i)}</span>${esc(pName(i))}</span>`}
-let timerKey=null,timerInterval=null,timerEnd=0,timerMins=0,timerSayNow='clean',audioCtx=null;
+let timerDone=false,timerKey=null,timerInterval=null,timerEnd=0,timerMins=0,timerSayNow='clean',audioCtx=null;
 const SAY={clean:'Clean up!',done:'All done!',none:''};
 const VKEY='pickandplay_voice';
 let VOICE={};try{VOICE=JSON.parse(localStorage.getItem(VKEY)||'{}')}catch(e){VOICE={}}
@@ -414,7 +425,7 @@ function render(){
   $('#slots').innerHTML=S.slots.map((s,i)=>{
     if(!s) return `<button class="slot" data-i="${i}" aria-label="Empty slot ${i+1}"><span class="num">${i+1}</span><span class="empty">Choose an activity</span></button>`;
     const t=tileFor(s.id);
-    return `<button class="slot filled ${i===nowIdx?'now':''} ${S.pair.on&&!s.locked&&s.by!=null?'byp':''}" style="${S.pair.on&&!s.locked&&s.by!=null?'--pc:'+S.pair.players[s.by].color:''}" data-i="${i}" aria-label="${t.name}, slot ${i+1}${i===nowIdx?', now':''}"><span class="num">${i+1}</span><span class="art">${art(t)}</span><span class="name">${t.name}</span>${s.locked?'<span class="badge lock">adult pick</span>':''}${S.pair.on&&!s.locked&&s.by!=null?whoChip(s.by):''}</button>`;
+    return `<button class="slot filled ${i===nowIdx?'now':''} ${i===nowIdx&&isWaiting()?'waiting':''} ${i===nowIdx&&isReady()?'ready':''} ${S.pair.on&&!s.locked&&s.by!=null?'byp':''}" style="${S.pair.on&&!s.locked&&s.by!=null?'--pc:'+S.pair.players[s.by].color:''}" data-i="${i}" aria-label="${t.name}, slot ${i+1}${i===nowIdx?', now':''}"><span class="num">${i+1}</span><span class="art">${art(t)}</span><span class="name">${t.name}</span>${s.locked?'<span class="badge lock">adult pick</span>':''}${i===nowIdx&&isWaiting()?'<span class="waitIcon" aria-hidden="true">&#9203;</span>':''}${S.pair.on&&!s.locked&&s.by!=null?whoChip(s.by):''}</button>`;
   }).join('');
   $('#pocket').innerHTML=S.done.length?S.done.map((id,k)=>{const by=S.doneBy[k];const who=S.pair.on&&typeof by==='number'&&by<S.pair.count;return `<span class="chip${who?' byp':''}" style="${who?'--pc:'+S.pair.players[by].color:''}">&#10003; ${tileFor(id).name}${who?' '+whoChip(by):''}${S.pair.on&&by==='a'?' <span class="adulttag">adult</span>':''}</span>`}).join(''):'<span style="opacity:.6;font-size:.8rem">Finished activities land here</span>';
   const finished=S.done.length&&!S.slots.some(Boolean);
@@ -446,11 +457,11 @@ function timerTick(){
   const b=$('#timerBadge');if(!b)return;
   const m=Math.floor(remain/60),s=remain%60;
   b.textContent='⏱ '+m+':'+(s<10?'0':'')+s;
-  if(remain<=0){clearInterval(timerInterval);timerInterval=null;b.textContent=SAY[timerSayNow]||'⏱ Done';try{navigator.vibrate&&navigator.vibrate([400,200,400,200,400,200,400])}catch(e){}beep();setTimeout(()=>playVoice(timerSayNow),ALARM_SEC*1000+300)}
+  if(remain<=0){clearInterval(timerInterval);timerInterval=null;timerDone=true;setTimeout(render,0);b.textContent=SAY[timerSayNow]||'⏱ Done';try{navigator.vibrate&&navigator.vibrate([400,200,400,200,400,200,400])}catch(e){}beep();setTimeout(()=>playVoice(timerSayNow),ALARM_SEC*1000+300)}
 }
 function setupTimerFor(key,mins,say){
   if(timerKey===key&&(timerInterval||(timerMins===(mins||0)&&timerSayNow===(say||'clean'))))return;
-  clearInterval(timerInterval);timerInterval=null;timerKey=key;
+  clearInterval(timerInterval);timerInterval=null;timerKey=key;timerDone=false;
   const b=$('#timerBadge'),st=$('#timerStart');if(!b||!st)return;
   b.hidden=true;
   if(!mins){st.hidden=true;return}
@@ -487,6 +498,7 @@ $('#slots').addEventListener('click',e=>{
   const i=+b.dataset.i;const s=S.slots[i];if(!s)return;
   const nowIdx=S.slots.findIndex(x=>x);
   if(i!==nowIdx){toast('Finish the top activity first');logLine(`Tapped slot ${i+1} out of order`);return}
+  if(!S.adult&&isWaiting()){const st=$('#timerStart');const el=(st&&!st.hidden)?st:$('#timerBadge');if(el){el.classList.remove('nudge');void el.offsetWidth;el.classList.add('nudge')}b.classList.remove('shake');void b.offsetWidth;b.classList.add('shake');logLine(`Tapped slot ${i+1} before the timer ended`);return}
     S.done.push(s.id);S.doneBy.push(s.locked?'a':(s.by!=null?s.by:null));S.slots[i]=null;
   render();
   if(!S.slots.some(x=>x)){toast('All done!')}
@@ -511,8 +523,8 @@ $('#btnReset').onclick=()=>{const b=$('#btnReset');if(resetArmed){clearTimeout(r
 $('#nSlots').onchange=e=>{const n=Math.max(2,Math.min(8,+e.target.value||4));const f=S.slots.filter(Boolean).slice(0,n);S.slots=Array(n).fill(null).map((_,i)=>f[i]||null);logLine('Slots set to '+n)};
 $('#rewardSel').onchange=e=>{const v=e.target.value;if(v==='__custom__'){S.rewardTile=null;S.reward=S.reward||'';render();$('#rewardText').focus()}else{S.rewardTile=v||null;S.reward='';render()}};
 $('#rewardText').oninput=e=>{S.rewardTile=null;S.reward=e.target.value;render()};
-function save(){try{localStorage.setItem('pickandplay',JSON.stringify({tiles:S.tiles,reward:S.reward,rewardTile:S.rewardTile,n:S.slots.length,pair:S.pair,defTimer:S.defTimer}))}catch(e){}}
-function load(){try{const d=JSON.parse(localStorage.getItem('pickandplay')||'null');if(!d)return;if(Array.isArray(d.tiles)){const by=Object.fromEntries(d.tiles.map(t=>[t.id,t]));S.tiles=DEFAULT_TILES.map(t=>{const o=by[t.id]||{};return {...t,...(o.photo?{photo:o.photo}:{}),...(o.name&&o.name!==LEGACY_NAMES[t.id]?{name:o.name}:{}),...(o.hidden?{hidden:true}:{}),...(o.timerMin!=null?{timerMin:o.timerMin}:{}),...(o.timerSay?{timerSay:o.timerSay}:{})}}).concat(d.tiles.filter(t=>t.custom));}S.reward=d.reward||'';if(d.defTimer&&typeof d.defTimer.min==='number')S.defTimer={min:d.defTimer.min,say:d.defTimer.say||'clean'};S.rewardTile=d.rewardTile||null;if(d.n)S.slots=Array(d.n).fill(null);if(d.pair&&Array.isArray(d.pair.players)){const def=S.pair.players;S.pair={...S.pair,...d.pair};S.pair.players=[0,1,2].map(k=>d.pair.players[k]||def[k]);S.pair.count=d.pair.count===3?3:2}}catch(e){}}
+function save(){try{localStorage.setItem('pickandplay',JSON.stringify({tiles:S.tiles,reward:S.reward,rewardTile:S.rewardTile,n:S.slots.length,pair:S.pair,defTimer:S.defTimer,waitTimer:S.waitTimer}))}catch(e){}}
+function load(){try{const d=JSON.parse(localStorage.getItem('pickandplay')||'null');if(!d)return;if(Array.isArray(d.tiles)){const by=Object.fromEntries(d.tiles.map(t=>[t.id,t]));S.tiles=DEFAULT_TILES.map(t=>{const o=by[t.id]||{};return {...t,...(o.photo?{photo:o.photo}:{}),...(o.name&&o.name!==LEGACY_NAMES[t.id]?{name:o.name}:{}),...(o.hidden?{hidden:true}:{}),...(o.timerMin!=null?{timerMin:o.timerMin}:{}),...(o.timerSay?{timerSay:o.timerSay}:{})}}).concat(d.tiles.filter(t=>t.custom));}S.reward=d.reward||'';if(d.defTimer&&typeof d.defTimer.min==='number')S.defTimer={min:d.defTimer.min,say:d.defTimer.say||'clean'};if(typeof d.waitTimer==='boolean')S.waitTimer=d.waitTimer;S.rewardTile=d.rewardTile||null;if(d.n)S.slots=Array(d.n).fill(null);if(d.pair&&Array.isArray(d.pair.players)){const def=S.pair.players;S.pair={...S.pair,...d.pair};S.pair.players=[0,1,2].map(k=>d.pair.players[k]||def[k]);S.pair.count=d.pair.count===3?3:2}}catch(e){}}
 let renameId=null,restoreArmed=null;
 $('#renSave').onclick=()=>{const t=tileFor(renameId);const name=$('#renName').value.trim();if(!t||!name){$('#renName').focus();return}t.name=name;renameId=null;$('#renForm').hidden=true;render();toast(`Renamed to "${name}"`)};
 $('#renCancel').onclick=()=>{renameId=null;$('#renForm').hidden=true};
@@ -541,7 +553,7 @@ $('#fileIn').onchange=e=>{
   });
   r.readAsDataURL(f);
 };
-function setupData(){return {app:'pickandplay',version:1,exported:new Date().toISOString(),settings:{tiles:S.tiles,reward:S.reward,rewardTile:S.rewardTile,n:S.slots.length,pair:S.pair,defTimer:S.defTimer},voice:VOICE}}
+function setupData(){return {app:'pickandplay',version:1,exported:new Date().toISOString(),settings:{tiles:S.tiles,reward:S.reward,rewardTile:S.rewardTile,n:S.slots.length,pair:S.pair,defTimer:S.defTimer,waitTimer:S.waitTimer},voice:VOICE}}
 $('#btnExport').onclick=async()=>{
   const d=new Date(),name='pick-and-play-setup-'+d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')+'.json';
   const blob=new Blob([JSON.stringify(setupData())],{type:'application/json'});
@@ -559,9 +571,10 @@ $('#setupIn').onchange=e=>{const f=e.target.files[0];e.target.value='';if(!f)ret
     toast('Setup loaded');logLine('Loaded setup file');};
   r.readAsText(f)};
 $('#defMin').onchange=e=>{S.defTimer.min=+e.target.value;render();toast(S.defTimer.min?`Default timer: ${S.defTimer.min} min`:'Default timer off')};
+$('#waitTimer').onchange=e=>{S.waitTimer=e.target.checked;render();toast(S.waitTimer?'Activities finish only after the timer':'Activities can be finished any time')};
 $('#defSay').onchange=e=>{S.defTimer.say=e.target.value;render()};
 function fixColors(){const used=new Set();for(let k=0;k<S.pair.count;k++){const pl=S.pair.players[k];if(used.has(pl.color))pl.color=PCOLORS.find(c=>!used.has(c));used.add(pl.color)}}
-function renderTurns(){$('#defMin').value=String(S.defTimer.min);$('#defSay').value=S.defTimer.say;const on=S.pair.on;$('#turnsOn').checked=on;$('#turnsSetup').hidden=!on;$('#turnsCountWrap').hidden=!on;$('#turnsCount').value=String(S.pair.count);
+function renderTurns(){$('#waitTimer').checked=!!S.waitTimer;$('#defMin').value=String(S.defTimer.min);$('#defSay').value=S.defTimer.say;const on=S.pair.on;$('#turnsOn').checked=on;$('#turnsSetup').hidden=!on;$('#turnsCountWrap').hidden=!on;$('#turnsCount').value=String(S.pair.count);
   document.querySelectorAll('.pcard').forEach(c=>{const i=+c.dataset.p,pl=S.pair.players[i];c.hidden=i>=S.pair.count;c.style.setProperty('--pc',pl.color);const av=c.querySelector('.pav');av.innerHTML=pl.photo?`<img src="${pl.photo}" alt="">`:(esc(pName(i).charAt(0).toUpperCase())+'<span style="position:absolute;font-size:0">add photo</span>');
     const nm=c.querySelector('.pname');if(document.activeElement!==nm)nm.value=pl.name||'';nm.placeholder='Child '+(i+1)+' name';
     c.querySelector('.swatches').innerHTML=PCOLORS.map(col=>`<button type="button" data-col="${col}" style="background:${col}" aria-label="Color" aria-pressed="${col===pl.color}"></button>`).join('');c.querySelector('.pclr').hidden=!pl.photo});
